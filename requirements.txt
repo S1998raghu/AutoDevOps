@@ -1,0 +1,7 @@
+pyyaml
+fastapi
+uvicorn
+kubernetes
+click
+openai
+python-multipart

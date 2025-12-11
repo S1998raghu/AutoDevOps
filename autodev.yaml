@@ -1,0 +1,17 @@
+environment: "local"
+
+k8s:
+  enabled: false
+  namespace: "autodev"
+  image: "autodev:latest"
+
+ai:
+  provider: "openai"
+  model: "gpt-4.1-mini"
+
+logging:
+  level: "DEBUG"
+
+paths:
+  logs: "./logs"
+  artifacts: "./artifacts"
