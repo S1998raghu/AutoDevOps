@@ -19,7 +19,7 @@ class JobSubmission(BaseModel):
 class TriageResponse(BaseModel):
     summary: str
     type: str
-    suggested_fix: str
+    suggested_fix: strbut
 
 @app.get("/")
 def health():
