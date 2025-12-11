@@ -15,9 +15,11 @@ def detect_project_type(repo_url: str) -> tuple:
         )
 
         # Check for project files
-        if os.path.exists(os.path.join(temp_dir, "requirements.txt")) or os.path.exists(os.path.join(temp_dir, "setup.py")):
+        if (os.path.exists(os.path.join(temp_dir, "requirements.txt")) or
+            os.path.exists(os.path.join(temp_dir, "setup.py")) or
+            os.path.exists(os.path.join(temp_dir, "pyproject.toml"))):
             return ("python", "python:3.9",
-                   f"git clone {repo_url} /app && cd /app && pip install -r requirements.txt 2>/dev/null || true && pytest")
+                   f"git clone {repo_url} /app && cd /app && pip install pytest && (pip install -r requirements.txt 2>/dev/null || pip install -e '.[dev]' 2>/dev/null || pip install -e . 2>/dev/null || true) && pytest")
 
         elif os.path.exists(os.path.join(temp_dir, "package.json")):
             return ("node", "node:18-alpine",

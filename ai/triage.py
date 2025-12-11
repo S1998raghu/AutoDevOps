@@ -1,10 +1,18 @@
 import os
 from openai import OpenAI
 
-def analyze_failure(log_file):
-    """Analyze failure logs using OpenAI API."""
-    with open(log_file, "r") as f:
-        content = f.read()
+def analyze_failure(log_content):
+    """Analyze failure logs using OpenAI API.
+
+    Args:
+        log_content: Can be either a file path (str ending with .log) or log content (str)
+    """
+    # Check if it's a file path or content
+    if isinstance(log_content, str) and log_content.endswith('.log'):
+        with open(log_content, "r") as f:
+            content = f.read()
+    else:
+        content = log_content
 
     # Get OpenAI API key from environment
     api_key = os.getenv("OPENAI_API_KEY")
