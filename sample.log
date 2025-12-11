@@ -1,0 +1,6 @@
+[2024-12-10 14:23:45] Starting build process...
+[2024-12-10 14:23:46] Installing dependencies
+[2024-12-10 14:23:47] ERROR: Could not find a version that satisfies the requirement requests
+[2024-12-10 14:23:47] ERROR: No matching distribution found for requests
+[2024-12-10 14:23:47] Build failed with exit code 1
+[2024-12-10 14:23:47] Total build time: 2 seconds
