@@ -10,30 +10,107 @@ from ai.triage import analyze_failure
 from orchestrator.k8_runner import submit_job
 import tempfile
 import os
+import subprocess
+import time
 
 app = FastAPI(title="AutoDevOps API", version="1.0.0")
 
 class JobSubmission(BaseModel):
     job_name: str
+    repo_url: str = None
+    wait_for_completion: bool = True
+
+class JobResult(BaseModel):
+    job_name: str
+    namespace: str
+    status: str
+    logs: str = None
+    triage_analysis: dict = None
 
 class TriageResponse(BaseModel):
     summary: str
     type: str
-    suggested_fix: strbut
+    suggested_fix: str
 
 @app.get("/")
 def health():
     """Health check endpoint."""
     return {"status": "ok", "service": "AutoDevOps"}
 
-@app.post("/api/v1/jobs/submit")
+@app.post("/api/v1/jobs/submit", response_model=JobResult)
 def submit_k8s_job(job: JobSubmission):
-    """Submit a job to Kubernetes cluster."""
+    """Submit a job to Kubernetes cluster and optionally wait for completion with auto-triage."""
     try:
-        result = submit_job(job.job_name)
+        # 1. Submit the job
+        result = submit_job(job.job_name, repo_url=job.repo_url)
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
-        return result
+
+        job_name = result["job_name"]
+        namespace = result.get("namespace", "default")
+
+        # If not waiting, return immediately
+        if not job.wait_for_completion:
+            return JobResult(
+                job_name=job_name,
+                namespace=namespace,
+                status="submitted"
+            )
+
+        # 2. Wait for completion
+        max_wait = 300  # 5 minutes
+        start_time = time.time()
+
+        while time.time() - start_time < max_wait:
+            # Check if succeeded
+            status_result = subprocess.run(
+                ["kubectl", "get", "job", job_name, "-n", namespace, "-o", "jsonpath={.status.succeeded}"],
+                capture_output=True,
+                text=True
+            )
+
+            # Check if failed
+            failed_result = subprocess.run(
+                ["kubectl", "get", "job", job_name, "-n", namespace, "-o", "jsonpath={.status.failed}"],
+                capture_output=True,
+                text=True
+            )
+
+            # Get logs
+            logs_result = subprocess.run(
+                ["kubectl", "logs", f"job/{job_name}", "-n", namespace],
+                capture_output=True,
+                text=True
+            )
+            logs = logs_result.stdout
+
+            if status_result.stdout.strip() == "1":
+                return JobResult(
+                    job_name=job_name,
+                    namespace=namespace,
+                    status="succeeded",
+                    logs=logs
+                )
+
+            if failed_result.stdout.strip() == "1":
+                # 3. Auto-triage on failure
+                triage_result = analyze_failure(logs)
+
+                return JobResult(
+                    job_name=job_name,
+                    namespace=namespace,
+                    status="failed",
+                    logs=logs,
+                    triage_analysis=triage_result
+                )
+
+            time.sleep(5)
+
+        # Timeout
+        raise HTTPException(status_code=408, detail="Job execution timeout")
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

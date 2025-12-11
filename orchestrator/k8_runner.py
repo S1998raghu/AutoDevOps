@@ -3,11 +3,55 @@ import subprocess
 import time
 import tempfile
 
-def submit_job(job_name: str):
+def detect_project_type(repo_url: str) -> tuple:
+    """Detect project type from repo. Returns (type, image, command)."""
+    # Clone repo temporarily to detect type
+    temp_dir = tempfile.mkdtemp()
+    try:
+        subprocess.run(
+            ["git", "clone", "--depth", "1", repo_url, temp_dir],
+            capture_output=True,
+            check=True
+        )
+
+        # Check for project files
+        if os.path.exists(os.path.join(temp_dir, "requirements.txt")) or os.path.exists(os.path.join(temp_dir, "setup.py")):
+            return ("python", "python:3.9",
+                   f"git clone {repo_url} /app && cd /app && pip install -r requirements.txt 2>/dev/null || true && pytest")
+
+        elif os.path.exists(os.path.join(temp_dir, "package.json")):
+            return ("node", "node:18-alpine",
+                   f"git clone {repo_url} /app && cd /app && npm install && npm test")
+
+        elif os.path.exists(os.path.join(temp_dir, "pom.xml")):
+            return ("java", "maven:3.8-openjdk-11",
+                   f"git clone {repo_url} /app && cd /app && mvn test")
+
+        elif os.path.exists(os.path.join(temp_dir, "go.mod")):
+            return ("go", "golang:1.20",
+                   f"git clone {repo_url} /app && cd /app && go test ./...")
+
+        else:
+            # Default: just clone and list
+            return ("generic", "alpine/git:latest",
+                   f"git clone {repo_url} /app && ls -la /app")
+
+    finally:
+        subprocess.run(["rm", "-rf", temp_dir], capture_output=True)
+
+def submit_job(job_name: str, repo_url: str = None):
     """Submit a job to Kubernetes cluster using kubectl."""
     try:
         namespace = os.getenv("K8S_NAMESPACE", "default")
-        image = os.getenv("K8S_JOB_IMAGE", "busybox:latest")
+
+        # Detect project type and get appropriate image/command
+        if repo_url:
+            project_type, image, test_command = detect_project_type(repo_url)
+            print(f"[AutoDev] Detected project type: {project_type}")
+        else:
+            # Fallback if no repo provided
+            image = os.getenv("K8S_JOB_IMAGE", "busybox:latest")
+            test_command = f"echo 'Running job: {job_name}'"
 
         # Create job YAML
         job_yaml = f"""apiVersion: batch/v1
@@ -25,7 +69,8 @@ spec:
       containers:
       - name: {job_name}
         image: {image}
-        command: ["echo", "Running job: {job_name}"]
+        command: ["sh", "-c"]
+        args: ["{test_command}"]
 """
 
         # Apply the job using kubectl
