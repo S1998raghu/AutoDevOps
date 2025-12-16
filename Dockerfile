@@ -4,5 +4,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . . 
-CMD ["python","client.py"]
+COPY . .
+
+# Run FastAPI server instead of CLI
+CMD ["uvicorn", "service.main:app", "--host", "0.0.0.0", "--port", "8000"]
