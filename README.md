@@ -116,33 +116,31 @@ If the job fails, Claude automatically triages the logs and prints the analysis.
 
 The Kubernetes pod cannot use your local Claude Code CLI session, so it authenticates with the Anthropic API directly using `ANTHROPIC_API_KEY`.
 
-#### Step 1 — Add secrets to GitHub
-In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
+The deploy workflow runs on a **self-hosted runner** on your Mac, so it has direct access to Docker Desktop Kubernetes, your kubeconfig, kubectl, terraform, and Claude Code CLI — no need to export any of those as secrets.
+
+#### Step 1 — Register your Mac as a self-hosted runner
+1. Go to your GitHub repo → **Settings → Actions → Runners → New self-hosted runner**
+2. Select **macOS** and follow the install script GitHub provides (one-time setup, ~5 min)
+3. Start the runner: `./run.sh`
+
+#### Step 2 — Add your Anthropic API key as a GitHub Secret
+Go to **Settings → Secrets and variables → Actions**, add:
 
 | Secret | Value |
 |---|---|
 | `ANTHROPIC_API_KEY` | `sk-ant-your-key-here` |
-| `KUBECONFIG` | Contents of `~/.kube/config` |
 
-The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically injects `ANTHROPIC_API_KEY` as a Kubernetes Secret on every push to `master` — no API key is ever stored in the image or code.
+This is the only secret needed. The workflow injects it as a Kubernetes Secret — it is never stored in the image or code.
 
-#### Step 2 — Push to deploy
+#### Step 3 — Push to deploy
 ```bash
 git push origin master
 ```
 
-The workflow will:
+The workflow will automatically:
 1. Create the `anthropic-api-key` K8s Secret from GitHub Secrets
-2. Run `terraform apply` to deploy the FastAPI pod
-
-#### Manual deploy (local only)
-```bash
-docker build -t autodevops:latest .
-
-cd terraform/local-k8s
-terraform init
-terraform apply
-```
+2. Build the Docker image
+3. Run `terraform apply` to deploy the FastAPI pod
 
 API available at **http://localhost:30080**
 
@@ -294,7 +292,6 @@ logging:
 | Secret | Description |
 |---|---|
 | `ANTHROPIC_API_KEY` | Anthropic API key — injected as a K8s Secret by the deploy workflow |
-| `KUBECONFIG` | Kubeconfig for the target cluster |
 
 ### Environment Variables (optional overrides)
 ```bash
