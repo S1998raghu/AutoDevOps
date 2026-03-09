@@ -29,6 +29,15 @@ resource "kubernetes_deployment" "autodevops" {
             container_port = 8080
             name           = "http"
           }
+          env {
+            name = "ANTHROPIC_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = "anthropic-api-key"
+                key  = "api-key"
+              }
+            }
+          }
           resources {
             limits = {
               cpu    = "500m"

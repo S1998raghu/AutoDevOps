@@ -1,0 +1,42 @@
+name: Deploy AutoDevOps
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+
+      - name: Create namespace (if not exists)
+        run: kubectl create namespace autodevops --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Inject Anthropic API key as K8s Secret
+        run: |
+          kubectl create secret generic anthropic-api-key \
+            --from-literal=api-key=${{ secrets.ANTHROPIC_API_KEY }} \
+            --namespace autodevops \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: terraform/local-k8s
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform/local-k8s
+        run: terraform apply -auto-approve

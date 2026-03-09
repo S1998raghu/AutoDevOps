@@ -4,7 +4,7 @@ An AI-powered DevOps automation tool for intelligent failure triage and Kubernet
 
 ## Features
 
-- **AI-Powered Triage**: Automatically analyze failure logs using Claude AI — no API key required
+- **AI-Powered Triage**: Automatically analyze failure logs using Claude AI
 - **Kubernetes Job Orchestration**: Submit jobs that clone a repo and run tests
 - **Auto Language Detection**: Detects Python, Node, Java, Go projects automatically
 - **Auto Triage on Failure**: Any failing job gets triaged by Claude automatically
@@ -15,7 +15,7 @@ An AI-powered DevOps automation tool for intelligent failure triage and Kubernet
 ```
 AutoDevOps/
 ├── ai/
-│   └── triage.py              # Claude Agent SDK log analysis
+│   └── triage.py              # Claude log analysis (SDK or API depending on context)
 ├── cli/
 │   └── autodev_cli.py         # CLI commands
 ├── orchestrator/
@@ -39,12 +39,30 @@ AutoDevOps/
 └── Dockerfile
 ```
 
+---
+
+## Claude Authentication — Two Modes
+
+AutoDevOps uses Claude differently depending on where it runs:
+
+| Interface | Auth Method | How |
+|---|---|---|
+| **CLI (local)** | Claude Agent SDK | No API key needed — uses your Claude Code CLI session |
+| **Kubernetes (Docker)** | Anthropic API | Requires `ANTHROPIC_API_KEY` — set as a K8s Secret |
+
+`ai/triage.py` detects which mode to use automatically:
+- If `ANTHROPIC_API_KEY` env var is present → uses Anthropic API (Kubernetes mode)
+- If not → uses Claude Agent SDK (CLI mode, requires Claude Code CLI to be authenticated)
+
+---
+
 ## Prerequisites
 
 - Python 3.11+
 - Docker Desktop with Kubernetes enabled
-- **Claude Code CLI** installed and authenticated
+- **Claude Code CLI** installed and authenticated (for CLI mode)
 - **kubectl** configured
+- **Anthropic API key** (for Kubernetes/Docker mode only)
 
 ## Installation
 
@@ -58,7 +76,9 @@ pip3 install -r requirements.txt
 
 ## Usage
 
-### 1. CLI (Local)
+### 1. CLI (Local) — no API key needed
+
+The CLI uses Claude Agent SDK, which authenticates through your local Claude Code CLI session.
 
 #### Triage a log file directly
 ```bash
@@ -81,15 +101,41 @@ python3 client.py run my-test-job
 
 # With a real repo
 python3 client.py run my-test-job --repo https://github.com/user/repo
+
+# Target a subdirectory within the repo
+python3 client.py run my-test-job \
+  --repo https://github.com/S1998raghu/AutoDevOps \
+  --subdir test-jobs/failing-python
 ```
 
 If the job fails, Claude automatically triages the logs and prints the analysis.
 
 ---
 
-### 2. FastAPI via Docker + Kubernetes
+### 2. FastAPI via Docker + Kubernetes — requires API key
 
-#### Build & deploy
+The Kubernetes pod cannot use your local Claude Code CLI session, so it authenticates with the Anthropic API directly using `ANTHROPIC_API_KEY`.
+
+#### Step 1 — Add secrets to GitHub
+In your GitHub repo → **Settings → Secrets and variables → Actions**, add:
+
+| Secret | Value |
+|---|---|
+| `ANTHROPIC_API_KEY` | `sk-ant-your-key-here` |
+| `KUBECONFIG` | Contents of `~/.kube/config` |
+
+The GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically injects `ANTHROPIC_API_KEY` as a Kubernetes Secret on every push to `master` — no API key is ever stored in the image or code.
+
+#### Step 2 — Push to deploy
+```bash
+git push origin master
+```
+
+The workflow will:
+1. Create the `anthropic-api-key` K8s Secret from GitHub Secrets
+2. Run `terraform apply` to deploy the FastAPI pod
+
+#### Manual deploy (local only)
 ```bash
 docker build -t autodevops:latest .
 
@@ -121,6 +167,13 @@ curl -X POST http://localhost:30080/api/v1/jobs/submit \
     "job_name": "real-test-job",
     "repo_url": "https://github.com/user/repo"
   }'
+```
+
+#### Demo: end-to-end triage without K8s (dry run)
+```bash
+curl -X POST http://localhost:30080/api/v1/jobs/submit \
+  -H "Content-Type: application/json" \
+  -d '{"job_name": "demo", "dry_run": true}'
 ```
 
 #### Demo: end-to-end triage with failing job
@@ -188,11 +241,10 @@ k8_runner → kubectl → K8s Job created
         ↓
 Job clones repo → runs tests
         ↓
-  ┌─────────────────┐
-  │ success → logs  │
-  │ failure → logs  │
-  │         + Claude triage │
-  └─────────────────┘
+  ┌─────────────────────────────────┐
+  │ success → logs returned         │
+  │ failure → logs + Claude triage  │
+  └─────────────────────────────────┘
         ↓
 JSON response returned
 ```
@@ -202,12 +254,13 @@ JSON response returned
 ```
 failure logs
     ↓
-ai/triage.py → Claude Agent SDK → Claude CLI (on host)
+ai/triage.py
+    ├── ANTHROPIC_API_KEY set?
+    │       YES → Anthropic API (claude-opus-4-6)        ← Kubernetes mode
+    │       NO  → Claude Agent SDK → Claude Code CLI     ← CLI mode
     ↓
 { summary, type, suggested_fix }
 ```
-
-> Claude runs on the host machine (not inside the K8s job container). The FastAPI pod calls the Claude CLI via the Agent SDK when a job fails.
 
 ---
 
@@ -231,15 +284,22 @@ k8s:
   image: "autodevops:latest"
 ai:
   provider: "claude"
-  model: "claude-sonnet-4-6"
+  model: "claude-opus-4-6"
 logging:
   level: "DEBUG"
 ```
 
-### Environment Variables
+### GitHub Secrets (for Kubernetes/Docker mode)
+
+| Secret | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Anthropic API key — injected as a K8s Secret by the deploy workflow |
+| `KUBECONFIG` | Kubeconfig for the target cluster |
+
+### Environment Variables (optional overrides)
 ```bash
-K8S_NAMESPACE=default        # K8s namespace (default: default)
-K8S_JOB_IMAGE=busybox:latest # Fallback image when no repo provided
+K8S_NAMESPACE=default         # K8s namespace (default: default)
+K8S_JOB_IMAGE=busybox:latest  # Fallback image when no repo provided
 ```
 
 ---
@@ -249,6 +309,9 @@ K8S_JOB_IMAGE=busybox:latest # Fallback image when no repo provided
 **`CLINotFoundError`** — Claude Code CLI not installed. Get it at https://claude.ai/download
 
 **`CLIConnectionError`** — Not authenticated. Run `claude` in terminal and log in
+
+**Triage returns `api_error` in K8s** — `ANTHROPIC_API_KEY` GitHub Secret is missing or wrong.
+Go to GitHub → Settings → Secrets → Actions and ensure `ANTHROPIC_API_KEY` is set, then re-run the workflow.
 
 **`kubectl not found`** — kubectl not in PATH inside container. Rebuild the Docker image
 
@@ -265,5 +328,5 @@ MIT License
 ## Security Notes
 
 - Never commit API keys or credentials to git
-- Claude auth lives on your machine — not baked into images
+- The `ANTHROPIC_API_KEY` is stored as a Kubernetes Secret, not baked into the image
 - K8s RBAC is scoped to job creation only (`rbac.tf`)

@@ -5,3 +5,4 @@ kubernetes
 click
 python-multipart
 claude-agent-sdk
+anthropic
