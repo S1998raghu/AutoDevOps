@@ -41,15 +41,18 @@ def detect_project_type(repo_url: str) -> tuple:
     finally:
         subprocess.run(["rm", "-rf", temp_dir], capture_output=True)
 
-def submit_job(job_name: str, repo_url: str = None):
+def submit_job(job_name: str, repo_url: str = None, repo_subdir: str = None):
     """Submit a job to Kubernetes cluster using kubectl."""
     try:
         namespace = os.getenv("K8S_NAMESPACE", "default")
 
         # Detect project type and get appropriate image/command
         if repo_url:
-            project_type, image, test_command = detect_project_type(repo_url)
+            clone_target = f"{repo_url}/tree/main/{repo_subdir}" if repo_subdir else repo_url
+            project_type, image, _ = detect_project_type(repo_url)
             print(f"[AutoDev] Detected project type: {project_type}")
+            workdir = f"/app/{repo_subdir}" if repo_subdir else "/app"
+            test_command = f"git clone {repo_url} /app && cd {workdir} && pip install pytest && (pip install -r requirements.txt 2>/dev/null || true) && pytest"
         else:
             # Fallback if no repo provided
             image = os.getenv("K8S_JOB_IMAGE", "busybox:latest")

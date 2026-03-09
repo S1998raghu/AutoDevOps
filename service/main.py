@@ -7,6 +7,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from orchestrator.k8_runner import submit_job
+from ai.triage import analyze_failure
+import asyncio
 import subprocess
 import time
 
@@ -15,13 +17,16 @@ app = FastAPI(title="AutoDevOps API", version="1.0.0")
 class JobSubmission(BaseModel):
     job_name: str
     repo_url: str = None
+    repo_subdir: str = None
     wait_for_completion: bool = True
+    dry_run: bool = False
 
 class JobResult(BaseModel):
     job_name: str
     namespace: str
     status: str
     logs: str = None
+    triage: dict = None
 
 @app.get("/")
 def health():
@@ -32,7 +37,20 @@ def health():
 def submit_k8s_job(job: JobSubmission):
     """Submit a job to Kubernetes cluster and optionally wait for completion."""
     try:
-        result = submit_job(job.job_name, repo_url=job.repo_url)
+        if job.dry_run:
+            return JobResult(
+                job_name=job.job_name,
+                namespace="autodevops",
+                status="failed",
+                logs="ERROR: Could not find a version that satisfies the requirement requests==99.99.99\nERROR: No matching distribution found for requests==99.99.99",
+                triage={
+                    "summary": "pip failed to install requests==99.99.99 which does not exist on PyPI",
+                    "type": "dependency_error",
+                    "suggested_fix": "Fix the version in requirements.txt to a valid release e.g. requests==2.31.0"
+                }
+            )
+
+        result = submit_job(job.job_name, repo_url=job.repo_url, repo_subdir=job.repo_subdir)
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
 
@@ -64,7 +82,8 @@ def submit_k8s_job(job: JobSubmission):
                 return JobResult(job_name=job_name, namespace=namespace, status="succeeded", logs=logs)
 
             if failed_result.stdout.strip() == "1":
-                return JobResult(job_name=job_name, namespace=namespace, status="failed", logs=logs)
+                triage = asyncio.run(analyze_failure(logs))
+                return JobResult(job_name=job_name, namespace=namespace, status="failed", logs=logs, triage=triage)
 
             time.sleep(5)
 
