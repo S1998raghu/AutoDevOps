@@ -75,9 +75,16 @@ spec:
         args: ["{test_command}"]
 """
 
-        # Apply the job using kubectl
+        # Delete existing job if it exists (jobs are immutable)
+        subprocess.run(
+            ["kubectl", "delete", "job", job_name, "-n", namespace, "--ignore-not-found", "--wait"],
+            capture_output=True,
+            text=True
+        )
+
+        # Create the job using kubectl
         result = subprocess.run(
-            ["kubectl", "apply", "-f", "-"],
+            ["kubectl", "create", "-f", "-"],
             input=job_yaml,
             text=True,
             capture_output=True,

@@ -1,3 +1,4 @@
+import asyncio
 import click
 import subprocess
 import time
@@ -13,7 +14,7 @@ def cli():
 @click.argument("logfile")
 def triage(logfile):
     """Analyze a failure log with AI (standalone mode)."""
-    result = analyze_failure(logfile)
+    result = asyncio.run(analyze_failure(logfile))
     click.echo(result)
 
 @cli.command()
@@ -79,7 +80,7 @@ def run(job_name, repo):
 
             # 3. Auto-triage the failure
             click.echo("\n[AutoDev] Running AI triage analysis...")
-            analysis = analyze_failure(logs)
+            analysis = asyncio.run(analyze_failure(logs))
             click.echo(f"\n--- AI Analysis ---\n{analysis}")
             return
 

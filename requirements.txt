@@ -3,5 +3,5 @@ fastapi
 uvicorn
 kubernetes
 click
-openai
 python-multipart
+claude-agent-sdk
