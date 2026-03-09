@@ -20,14 +20,17 @@ def triage(logfile):
 @cli.command()
 @click.argument("job_name")
 @click.option("--repo", "-r", help="Git repository URL to test")
-def run(job_name, repo):
+@click.option("--subdir", "-s", help="Subdirectory within the repo to run tests from")
+def run(job_name, repo, subdir):
     """Submit a job to K8s and auto-analyze failures."""
     click.echo(f"[AutoDev] Submitting job: {job_name}")
     if repo:
         click.echo(f"[AutoDev] Repository: {repo}")
+    if subdir:
+        click.echo(f"[AutoDev] Subdirectory: {subdir}")
 
     # 1. Submit the job
-    result = submit_job(job_name, repo_url=repo)
+    result = submit_job(job_name, repo_url=repo, repo_subdir=subdir)
 
     if result.get("status") == "failed":
         click.echo(f"[AutoDev] Failed to submit job: {result.get('error')}")
