@@ -11,7 +11,7 @@ terraform {
   }
 
   backend "local" {
-   path = "~/.terraform-state/autodevops/terraform.tfstate"
+   path = "/Users/sumedharaghu/.terraform-state/autodevops/terraform.tfstate"
   }
 }
 
