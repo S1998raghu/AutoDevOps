@@ -8,7 +8,10 @@ jobs:
   deploy:
     # Self-hosted runner on your Mac — has access to Docker Desktop K8s,
     # local kubeconfig, kubectl, terraform, and Claude Code CLI auth.
+    # Environment gate: requires manual approval before running (protects
+    # against malicious push attempts on this public repo).
     runs-on: self-hosted
+
 
     steps:
       - name: Checkout

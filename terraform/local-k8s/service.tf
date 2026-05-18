@@ -1,7 +1,7 @@
 # Service to expose AutoDevOps
 resource "kubernetes_service" "autodevops" {
   metadata {
-    name      = "autodevops-svc"
+    name      = "autodevops-svc-1"
     namespace = kubernetes_namespace.autodevops.metadata[0].name
   }
 
