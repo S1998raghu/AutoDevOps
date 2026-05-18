@@ -21,7 +21,7 @@ jobs:
         run: pip3 install -r requirements.txt
 
       - name: Create namespace (if not exists)
-        run: kubectl create namespace autodevops --dry-run=client -o yaml | kubectl apply -f -
+        run: kubectl create namespace autodevops --dry-run=client -o yaml | kubectl apply --validate=false -f -
 
       - name: Inject Anthropic API key as K8s Secret
         env:

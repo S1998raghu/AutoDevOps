@@ -9,6 +9,10 @@ terraform {
     }
 
   }
+
+  backend "local" {
+   path = "~/.terraform-state/autodevops/terraform.tfstate"
+  }
 }
 
 
